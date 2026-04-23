@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบจัดการร้านอาหาร RestoManage</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Prompt & Material Symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel for parsing JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body { font-family: 'Prompt', sans-serif; }
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    
+    /* Custom Scrollbar */
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* Print Styles */
+    @media print {
+      body { background-color: white !important; }
+      .print-hidden { display: none !important; }
+      .print-expand { width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+      .print-no-shadow { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
+      /* Ensure scrollable areas expand fully for printing */
+      main, .custom-scrollbar { overflow: visible !important; height: auto !important; max-height: none !important; }
+      .flex-1 { flex: none !important; height: auto !important; }
+      #root { height: auto !important; overflow: visible !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // --- ICON HELPER COMPONENT ---
+    const Icon = ({ name, size = 24, className = "" }) => (
+      <span className={`material-symbols-outlined flex items-center justify-center ${className}`} style={{ fontSize: size, width: size, height: size }}>
+        {name}
+      </span>
+    );
+
+    // --- SHARED MODALS ---
+    function ConfirmModal({ isOpen, onClose, onConfirm, title, message }) {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 bg-slate-900/50 z-[10000] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200 print-hidden">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-slate-100 flex items-center gap-3 text-rose-600 bg-rose-50/50">
+              <Icon name="error" size={24} />
+              <h3 className="font-bold text-lg">{title}</h3>
+            </div>
+            <div className="p-6 text-slate-700 text-center font-medium leading-relaxed">{message}</div>
+            <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
+              <button onClick={onClose} className="px-5 py-2.5 text-slate-600 font-bold hover:bg-slate-200 rounded-xl transition-colors">ยกเลิก</button>
+              <button onClick={() => { onConfirm(); onClose(); }} className="px-5 py-2.5 bg-rose-600 text-white font-bold hover:bg-rose-700 rounded-xl transition-colors shadow-sm">ยืนยัน</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function MessageModal({ isOpen, onClose, title, message, iconName = "info", iconColor = "text-blue-500", bgHeader = "bg-blue-50" }) {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 bg-slate-900/60 z-[10000] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200 print-hidden">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-slate-100 flex items-center gap-3 ${iconColor} ${bgHeader}">
+              <Icon name={iconName} size={24} />
+              <h3 className="font-bold text-lg">{title}</h3>
+            </div>
+            <div className="p-6 text-slate-700 text-center font-medium leading-relaxed">{message}</div>
+            <div className="p-4 bg-slate-50 flex justify-end border-t border-slate-100">
+              <button onClick={onClose} className="px-5 py-2.5 bg-slate-800 text-white font-bold hover:bg-slate-900 rounded-xl transition-colors shadow-sm w-full">ตกลง</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- NEW: CSV EXPORT MODAL (Fixes Sandbox iframe block) ---
+    function CsvExportModal({ isOpen, onClose, content, fileName, showMessage }) {
+      if (!isOpen) return null;
+      
+      const handleCopy = () => {
+        const textArea = document.createElement("textarea");
+        textArea.value = content;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          showMessage("คัดลอกสำเร็จ!", "คัดลอกข้อมูล CSV ลงคลิปบอร์ดแล้ว คุณสามารถนำไปคลิกขวา -> Paste (วาง) ในช่อง A1 ของโปรแกรม Excel หรือ Google Sheets ได้เลย", "check_circle", "text-emerald-600", "bg-emerald-50");
+        } catch (e) {
+          showMessage("คัดลอกไม่สำเร็จ", "กรุณากดคลุมดำข้อความทั้งหมดและคัดลอก (Ctrl+C) ด้วยตนเอง", "error", "text-rose-600", "bg-rose-50");
+        }
+        document.body.removeChild(textArea);
+        onClose();
+      };
+
+      return (
+        <div className="fixed inset-0 bg-slate-900/70 z-[9999] flex items-center justify-center p-4 sm:p-6 backdrop-blur-sm animate-in fade-in duration-200 print-hidden">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-emerald-50 shrink-0">
+              <h3 className="font-bold text-lg text-emerald-900 flex items-center gap-2">
+                <Icon name="table_view" size={24} className="text-emerald-600" />
+                ข้อมูลเตรียมส่งออก: {fileName}
+              </h3>
+              <button onClick={onClose} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><Icon name="close" size={24} /></button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-50 custom-scrollbar">
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-xl mb-4 text-sm flex gap-3">
+                <Icon name="info" size={20} className="shrink-0 text-blue-500" />
+                <p>การดาวน์โหลดไฟล์อาจถูกบล็อกโดยหน้าต่างพรีวิว <b>กรุณากดปุ่ม "คัดลอกข้อมูล (Copy)" ด้านล่าง แล้วนำไป Paste (วาง) ลงในคอลัมน์แรก (ช่อง A1) ของไฟล์ Excel หรือ Google Sheets ของคุณ</b></p>
+              </div>
+              <textarea 
+                readOnly 
+                value={content}
+                className="w-full h-64 p-4 text-sm font-mono text-slate-700 bg-white border border-slate-200 rounded-xl outline-none focus:border-emerald-500 shadow-inner resize-none"
+              />
+            </div>
+            <div className="p-5 border-t border-slate-100 bg-white flex flex-col sm:flex-row justify-end gap-3 shrink-0">
+              <button onClick={onClose} className="px-6 py-2.5 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors w-full sm:w-auto">ปิดหน้าต่าง</button>
+              <button onClick={handleCopy} className="px-6 py-2.5 bg-emerald-600 text-white font-bold hover:bg-emerald-700 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto">
+                <Icon name="content_copy" size={20} /> คัดลอกข้อมูล (Copy)
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- EXPORT DROPDOWN MENU ---
+    function ExportMenu({ onExportCsv, fileNameContext, showMessage }) {
+      const [isOpen, setIsOpen] = useState(false);
+
+      const handlePrint = () => {
+        setIsOpen(false);
+        setTimeout(() => {
+          try { window.print(); } catch(e) {}
+          if(showMessage) {
+            showMessage("การบันทึก PDF / พิมพ์", "หากหน้าต่างสั่งพิมพ์ไม่ปรากฏ (อาจถูกบล็อกโดยระบบพรีวิว) กรุณากดคีย์ลัด Ctrl + P (สำหรับ Windows) หรือ Cmd + P (สำหรับ Mac) บนคีย์บอร์ดเพื่อสั่งพิมพ์หรือเซฟเป็น PDF ได้เลยครับ", "print", "text-blue-600", "bg-blue-50");
+          }
+        }, 150);
+      };
+
+      const handleCsv = () => {
+        setIsOpen(false);
+        if(onExportCsv) onExportCsv();
+      };
+
+      return (
+        <div className="relative z-30 print-hidden">
+          <button 
+            onClick={() => setIsOpen(!isOpen)} 
+            className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm w-full sm:w-auto justify-center"
+          >
+            <Icon name="ios_share" size={18} />
+            <span className="hidden sm:inline">ส่งออกข้อมูล</span>
+          </button>
+
+          {isOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-100 shadow-xl rounded-2xl p-1 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">
+                  เลือกรูปแบบ ({fileNameContext})
+                </div>
+                <button onClick={handlePrint} className="w-full text-left flex items-center gap-3 px-3 py-2.5 hover:bg-rose-50 text-slate-700 hover:text-rose-700 rounded-xl transition-colors font-medium text-sm">
+                  <Icon name="picture_as_pdf" size={18} className="text-rose-500" /> บันทึก PDF / พิมพ์
+                </button>
+                <button onClick={handleCsv} className="w-full text-left flex items-center gap-3 px-3 py-2.5 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-xl transition-colors font-medium text-sm">
+                  <Icon name="table_view" size={18} className="text-emerald-500" /> ส่งออกเป็น Excel (CSV)
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    // --- EXPANDED MOCK DATA ---
+    const INITIAL_INVENTORY = {
+      'เนื้อสัตว์': [
+        { id: 1, name: 'น่องติดสะโพก (1กก=3ชิ้น)', unit: 'กก.', price: 84, days: Array(31).fill('') },
+        { id: 2, name: 'น่องไก่ (1กก=7ชิ้น)', unit: 'กก.', price: 85, days: Array(31).fill('') },
+        { id: 3, name: 'สะโพกไก่ติดกระดูก', unit: 'กก.', price: 91, days: Array(31).fill('') },
+        { id: 4, name: 'ซีพี อกไก่เนื้อล้วน', unit: 'กก.', price: 80, days: Array(31).fill('') },
+        { id: 5, name: 'หมูสามชั้น', unit: 'กก.', price: 150, days: Array(31).fill('') },
+        { id: 6, name: 'เลือดไก่', unit: 'ก้อน', price: 11, days: Array(31).fill('') }
+      ],
+      'ผักสด': [
+        { id: 7, name: 'แตงร้าน', unit: 'กก.', price: 35, days: Array(31).fill('') },
+        { id: 8, name: 'ผักชีไทย', unit: 'กก.', price: 200, days: Array(31).fill('') },
+        { id: 9, name: 'ฟักแก่', unit: 'กก.', price: 22, days: Array(31).fill('') },
+        { id: 10, name: 'พริกจินดาแดง', unit: 'กก.', price: 80, days: Array(31).fill('') },
+        { id: 11, name: 'กระเทียมไทย', unit: 'กก.', price: 105, days: Array(31).fill('') },
+        { id: 12, name: 'ขิงแก่', unit: 'กก.', price: 70, days: Array(31).fill('') },
+        { id: 13, name: 'มะนาว', unit: 'ลูก', price: 5, days: Array(31).fill('') }
+      ],
+      'ของแห้ง': [
+        { id: 14, name: 'ข้าวหอมมะลิ 100% 5กก.', unit: 'ถุง', price: 195, days: Array(31).fill('') },
+        { id: 15, name: 'แป้งทอดกรอบ', unit: 'กก.', price: 47, days: Array(31).fill('') },
+        { id: 16, name: 'ผงเบคกิ้งโซดา 300ก.', unit: 'ห่อ', price: 28, days: Array(31).fill('') },
+        { id: 17, name: 'วุ้นเส้น', unit: 'แพ็ก', price: 120, days: Array(31).fill('') }
+      ],
+      'ของแช่แข็ง': [
+        { id: 18, name: 'หมูกรอบพร้อมทอด', unit: 'แพ็ก', price: 460, days: Array(31).fill('') },
+        { id: 19, name: 'กุยช่ายหนานุ่ม', unit: 'แพ็ก', price: 85, days: Array(31).fill('') },
+        { id: 20, name: 'ปอเปี๊ยะกุ้ง', unit: 'แพ็ก', price: 116, days: Array(31).fill('') },
+        { id: 21, name: 'ไก่ทอดคาราเกะ 1กก.', unit: 'แพ็ก', price: 150, days: Array(31).fill('') }
+      ],
+      'เครื่องปรุง': [
+        { id: 22, name: 'น้ำมันงา 630มล.', unit: 'ขวด', price: 155, days: Array(31).fill('') },
+        { id: 23, name: 'น้ำมันปาล์ม ถัง 18ล.', unit: 'ถัง', price: 780, days: Array(31).fill('') },
+        { id: 24, name: 'เต้าเจี้ยว สูตร1 1กก.', unit: 'แกลอน', price: 49, days: Array(31).fill('') },
+        { id: 25, name: 'น้ำส้มสายชูกลั่น 5ล.', unit: 'แกลอน', price: 50, days: Array(31).fill('') },
+        { id: 26, name: 'ซีอิ๊วขาว', unit: 'แกลอน', price: 65, days: Array(31).fill('') },
+        { id: 27, name: 'น้ำตาลมะพร้าว', unit: 'กก.', price: 99, days: Array(31).fill('') }
+      ],
+      'วัสดุสิ้นเปลือง': [
+        { id: 28, name: 'ถุงร้อน 5x8 cm.', unit: 'กก.', price: 79, days: Array(31).fill('') },
+        { id: 29, name: 'ถุงมือไร้แป้ง (100ชิ้น)', unit: 'กล่อง', price: 205, days: Array(31).fill('') },
+        { id: 30, name: 'กล่องอาหาร 750ml', unit: 'ลัง', price: 1050, days: Array(31).fill('') },
+        { id: 31, name: 'ถ้วยซุป 450ml', unit: 'ลัง', price: 700, days: Array(31).fill('') },
+        { id: 32, name: 'ช้อนพลาสติก', unit: 'ห่อ', price: 150, days: Array(31).fill('') }
+      ]
+    };
+
+    const formatCurrency = (num) => new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(num || 0);
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('dashboard'); 
+      const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+      const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+      const confirmAction = (title, message, onConfirm) => setConfirmConfig({ isOpen: true, title, message, onConfirm });
+      const closeConfirm = () => setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+
+      const [messageConfig, setMessageConfig] = useState({ isOpen: false, title: '', message: '', iconName: 'info', iconColor: 'text-blue-500', bgHeader: 'bg-blue-50' });
+      const showMessage = (title, message, iconName = 'info', iconColor = 'text-blue-500', bgHeader = 'bg-blue-50') => setMessageConfig({ isOpen: true, title, message, iconName, iconColor, bgHeader });
+      const closeMessage = () => setMessageConfig(prev => ({ ...prev, isOpen: false }));
+
+      const [csvModalConfig, setCsvModalConfig] = useState({ isOpen: false, content: '', fileName: '' });
+      const showCsvModal = (content, fileName) => setCsvModalConfig({ isOpen: true, content, fileName });
+      const closeCsvModal = () => setCsvModalConfig(prev => ({ ...prev, isOpen: false }));
+
+      const [globalDate, setGlobalDate] = useState(() => {
+        const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+        return (new Date(Date.now() - tzoffset)).toISOString().split('T')[0];
+      });
+
+      const [inventoryData, setInventoryData] = useState(() => {
+        const [year, month] = globalDate.split('-');
+        return { [`${year}-${month}`]: JSON.parse(JSON.stringify(INITIAL_INVENTORY)) };
+      });
+
+      const [financeData, setFinanceData] = useState({});
+
+      const [recipes, setRecipes] = useState([
+        {
+          id: 1, name: 'ข้าวผัดกะเพราหมูสับ', sellingPrice: 60,
+          ingredients: [
+            { id: 1, name: 'เนื้อหมู', apPrice: 150, apQty: 1000, unit: 'กรัม', yieldPercent: 100, recipeQty: 100 },
+            { id: 2, name: 'พริก/กระเทียม/ใบกะเพรา', apPrice: 20, apQty: 100, unit: 'กรัม', yieldPercent: 90, recipeQty: 15 },
+            { id: 3, name: 'เครื่องปรุงรส (ซอสต่างๆ)', apPrice: 50, apQty: 1000, unit: 'มล.', yieldPercent: 100, recipeQty: 10 },
+          ]
+        }
+      ]);
+
+      const handleGlobalDateChange = (newDateStr) => {
+        setGlobalDate(newDateStr);
+        const [y, m] = newDateStr.split('-');
+        const monthKey = `${y}-${m}`;
+        if (!inventoryData[monthKey]) {
+          setInventoryData(prev => ({ ...prev, [monthKey]: JSON.parse(JSON.stringify(INITIAL_INVENTORY)) }));
+        }
+      };
+
+      return (
+        <div className="flex h-screen bg-[#F8FAFC] font-sans text-slate-800 print-expand">
+          {/* Sidebar */}
+          <div className={`w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm fixed inset-y-0 z-50 transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition-transform duration-200 ease-in-out print-hidden`}>
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+              <div>
+                <h1 className="text-xl font-bold text-blue-700 flex items-center gap-2">
+                  <Icon name="settings" size={24} /> RestoManage
+                </h1>
+                <p className="text-xs text-slate-500 mt-1">ระบบจัดการร้านอาหาร</p>
+              </div>
+              <button className="md:hidden p-2 text-slate-400" onClick={() => setIsMobileMenuOpen(false)}><Icon name="close" size={20} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-4 custom-scrollbar">
+              <nav className="space-y-1 px-3">
+                <NavItem icon={<Icon name="dashboard" size={20} />} label="ภาพรวมระบบ" isActive={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} />
+                <div className="pt-5 pb-2 px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">การจัดการ</div>
+                <NavItem icon={<Icon name="calendar_month" size={20} />} label="บันทึกสั่งวัตถุดิบรายวัน" isActive={activeTab === 'daily-tracker'} onClick={() => { setActiveTab('daily-tracker'); setIsMobileMenuOpen(false); }} />
+                <NavItem icon={<Icon name="account_balance_wallet" size={20} />} label="บันทึกรายรับ-รายจ่าย" isActive={activeTab === 'income-expense'} onClick={() => { setActiveTab('income-expense'); setIsMobileMenuOpen(false); }} />
+                <NavItem icon={<Icon name="calculate" size={20} />} label="คำนวณต้นทุน (COG)" isActive={activeTab === 'cog-calculator'} onClick={() => { setActiveTab('cog-calculator'); setIsMobileMenuOpen(false); }} />
+              </nav>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1 flex flex-col h-screen overflow-hidden relative print-expand">
+            {isMobileMenuOpen && (<div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden transition-opacity print-hidden" onClick={() => setIsMobileMenuOpen(false)} />)}
+            
+            <div className="md:hidden bg-white p-4 border-b flex justify-between items-center shadow-sm z-30 print-hidden">
+              <h1 className="text-lg font-bold text-blue-700 flex items-center gap-2"><Icon name="settings" size={20} /> RestoManage</h1>
+              <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-slate-100 rounded-md"><Icon name="menu" size={20} className="text-slate-600" /></button>
+            </div>
+
+            <main className="flex-1 overflow-y-auto relative z-10 custom-scrollbar print-expand">
+              {activeTab === 'dashboard' && <DashboardView onNavigate={setActiveTab} />}
+              {activeTab === 'daily-tracker' && (
+                <DailyTrackerView globalDate={globalDate} onDateChange={handleGlobalDateChange} inventoryData={inventoryData} setInventoryData={setInventoryData} confirmAction={confirmAction} showCsvModal={showCsvModal} showMessage={showMessage} />
+              )}
+              {activeTab === 'income-expense' && (
+                <IncomeExpenseView globalDate={globalDate} onDateChange={handleGlobalDateChange} inventoryData={inventoryData} financeData={financeData} setFinanceData={setFinanceData} confirmAction={confirmAction} showCsvModal={showCsvModal} showMessage={showMessage} />
+              )}
+              {activeTab === 'cog-calculator' && (
+                <CogCalculatorView recipes={recipes} setRecipes={setRecipes} confirmAction={confirmAction} showCsvModal={showCsvModal} showMessage={showMessage} />
+              )}
+            </main>
+          </div>
+
+          {/* Global Modals */}
+          <ConfirmModal isOpen={confirmConfig.isOpen} onClose={closeConfirm} onConfirm={confirmConfig.onConfirm} title={confirmConfig.title} message={confirmConfig.message} />
+          <MessageModal isOpen={messageConfig.isOpen} onClose={closeMessage} title={messageConfig.title} message={messageConfig.message} iconName={messageConfig.iconName} iconColor={messageConfig.iconColor} bgHeader={messageConfig.bgHeader} />
+          <CsvExportModal isOpen={csvModalConfig.isOpen} onClose={closeCsvModal} content={csvModalConfig.content} fileName={csvModalConfig.fileName} showMessage={showMessage} />
+        </div>
+      );
+    }
+
+    // --- DASHBOARD COMPONENT ---
+    function DashboardView({ onNavigate }) {
+      const categories = [
+        {
+          title: "การจัดการวัตถุดิบและต้นทุน", description: "ไฟล์รายการของและสั่งวัตถุดิบ", bgClass: "bg-gradient-to-br from-emerald-50 to-emerald-100/50", iconColor: "text-emerald-600",
+          items: [
+            { name: "1. ไฟล์บันทึกสั่งวัตถุดิบรายวัน", icon: <Icon name="calendar_month" size={16} />, action: () => onNavigate('daily-tracker'), highlight: true },
+            { name: "2. ไฟล์คำนวน COG & Yield", icon: <Icon name="calculate" size={16} />, action: () => onNavigate('cog-calculator'), highlight: true }
+          ]
+        },
+        {
+          title: "การเงินและบัญชี", description: "บันทึกรายรับรายจ่ายประจำวัน", bgClass: "bg-gradient-to-br from-amber-50 to-amber-100/50", iconColor: "text-amber-600",
+          items: [
+            { name: "3. ไฟล์บันทึกรายรับ-รายจ่าย", icon: <Icon name="account_balance_wallet" size={16} />, action: () => onNavigate('income-expense'), highlight: true }
+          ]
+        }
+      ];
+
+      return (
+        <div className="p-6 md:p-10 max-w-7xl mx-auto">
+          <header className="mb-8 md:mb-12">
+            <h2 className="text-3xl font-bold text-slate-800">หมวดหมู่ไฟล์ข้อมูลร้าน</h2>
+            <p className="text-slate-500 mt-2 text-lg">เข้าถึงไฟล์การบริหารร้านของคุณได้อย่างเป็นระเบียบ</p>
+          </header>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {categories.map((cat, idx) => (
+              <div key={idx} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg transition-all duration-300">
+                <div className={`p-6 border-b border-slate-100 ${cat.bgClass}`}>
+                  <div className="w-10 h-10 bg-white rounded-lg shadow-sm flex items-center justify-center mb-4"><Icon name="description" className={cat.iconColor} size={20} /></div>
+                  <h3 className="font-bold text-xl text-slate-800">{cat.title}</h3>
+                  <p className="text-sm text-slate-600 mt-1">{cat.description}</p>
+                </div>
+                <div className="p-4">
+                  <ul className="space-y-2">
+                    {cat.items.map((item, i) => (
+                      <li key={i}>
+                        <button onClick={item.action} className={`w-full text-left flex items-center justify-between p-3 rounded-xl text-sm transition-all duration-200 ${item.highlight ? 'bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:border-slate-200'}`}>
+                          <div className="flex items-center gap-3"><span className={item.highlight ? "text-blue-200" : "text-slate-400"}>{item.icon}</span><span className="truncate">{item.name}</span></div>
+                          <Icon name="chevron_right" size={16} className={item.highlight ? "text-white opacity-70" : "text-slate-300"} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // --- SHARED CALENDAR DATE PICKER ---
+    function CustomDatePicker({ selectedDate, onDateChange }) {
+      const [showDatePicker, setShowDatePicker] = useState(false);
+      const [pickerViewDate, setPickerViewDate] = useState(() => { const [y, m, d] = selectedDate.split('-'); return new Date(y, m - 1, d); });
+
+      useEffect(() => { const [y, m, d] = selectedDate.split('-'); setPickerViewDate(new Date(y, m - 1, d)); }, [selectedDate]);
+
+      const changeDay = (offset) => {
+        const [y, m, d] = selectedDate.split('-').map(Number);
+        const currentDate = new Date(y, m - 1, d); currentDate.setDate(currentDate.getDate() + offset);
+        onDateChange(`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`);
+      };
+
+      const handleCalendarSelect = (day) => {
+        onDateChange(`${pickerViewDate.getFullYear()}-${String(pickerViewDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+        setShowDatePicker(false);
+      };
+
+      const THAI_MONTHS_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+      
+      return (
+        <div className="relative z-20 print-hidden">
+          <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2 select-none">
+            <button onClick={() => changeDay(-1)} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors text-slate-600"><Icon name="chevron_left" size={20} /></button>
+            <div className="flex flex-col items-center px-4 relative group cursor-pointer hover:bg-blue-50 py-1.5 rounded-xl transition-colors min-w-[200px]" onClick={() => setShowDatePicker(!showDatePicker)}>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-1"><Icon name="calendar_today" size={12} /> ประจำวันที่</span>
+              <span className="text-base sm:text-lg font-bold text-blue-700 group-hover:text-blue-800 transition-colors text-center w-full">{new Date(selectedDate).toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            </div>
+            <button onClick={() => changeDay(1)} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors text-slate-600"><Icon name="chevron_right" size={20} /></button>
+          </div>
+
+          {showDatePicker && (
+            <div className="absolute top-full mt-2 right-0 md:left-1/2 md:-translate-x-1/2 w-[340px] bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 z-50 animate-in fade-in zoom-in duration-200 origin-top">
+              <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-100">
+                <button onClick={() => { const nd = new Date(pickerViewDate); nd.setMonth(nd.getMonth() - 1); setPickerViewDate(nd); }} className="p-2 bg-slate-50 hover:bg-slate-200 rounded-lg text-slate-600"><Icon name="chevron_left" size={20} /></button>
+                <span className="font-bold text-slate-800 text-lg">{THAI_MONTHS_FULL[pickerViewDate.getMonth()]} {pickerViewDate.getFullYear() + 543}</span>
+                <button onClick={() => { const nd = new Date(pickerViewDate); nd.setMonth(nd.getMonth() + 1); setPickerViewDate(nd); }} className="p-2 bg-slate-50 hover:bg-slate-200 rounded-lg text-slate-600"><Icon name="chevron_right" size={20} /></button>
+              </div>
+              <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 mb-2">
+                <div className="text-red-400">อา</div><div>จ</div><div>อ</div><div>พ</div><div>พฤ</div><div>ศ</div><div className="text-red-400">ส</div>
+              </div>
+              <div className="grid grid-cols-7 gap-2">
+                {Array.from({ length: new Date(pickerViewDate.getFullYear(), pickerViewDate.getMonth(), 1).getDay() }).map((_, i) => <div key={`empty-${i}`} className="p-2" />)}
+                {Array.from({ length: new Date(pickerViewDate.getFullYear(), pickerViewDate.getMonth() + 1, 0).getDate() }).map((_, i) => {
+                  const day = i + 1;
+                  const currentStr = `${pickerViewDate.getFullYear()}-${String(pickerViewDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  const isSelected = currentStr === selectedDate;
+                  const isToday = currentStr === new Date(Date.now() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                  return (
+                    <button key={day} onClick={() => handleCalendarSelect(day)} className={`aspect-square flex items-center justify-center text-sm font-bold rounded-full transition-all ${isSelected ? 'bg-blue-600 text-white shadow-md transform scale-110' : isToday ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'text-slate-700 hover:bg-slate-100'}`}>{day}</button>
+                  );
+                })}
+              </div>
+              <button onClick={() => setShowDatePicker(false)} className="w-full mt-5 text-xs font-bold text-slate-400 hover:text-slate-600 py-3 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors">ปิดหน้าต่าง</button>
+            </div>
+          )}
+          {showDatePicker && <div className="fixed inset-0 z-40" onClick={() => setShowDatePicker(false)} />}
+        </div>
+      );
+    }
+
+    // --- DAILY TRACKER COMPONENT ---
+    function DailyTrackerView({ globalDate, onDateChange, inventoryData, setInventoryData, confirmAction, showCsvModal, showMessage }) {
+      const [activeCategory, setActiveCategory] = useState('เนื้อสัตว์');
+      const [newItemName, setNewItemName] = useState(''); const [newItemUnit, setNewItemUnit] = useState(''); const [newItemPrice, setNewItemPrice] = useState('');
+
+      const [yearStr, monthStr, dayStr] = globalDate.split('-');
+      const monthYearKey = `${yearStr}-${monthStr}`;
+      const dayIndex = parseInt(dayStr, 10) - 1;
+      const currentInventory = inventoryData[monthYearKey] || INITIAL_INVENTORY;
+      const categories = Object.keys(currentInventory);
+      const daysInSelectedMonth = new Date(parseInt(yearStr), parseInt(monthStr), 0).getDate();
+
+      const handleQtyChange = (categoryId, itemId, value) => {
+        if (value !== '' && isNaN(value)) return;
+        setInventoryData(prev => {
+          const monthData = { ...prev[monthYearKey] };
+          const categoryItems = [...monthData[categoryId]];
+          const itemIndex = categoryItems.findIndex(i => i.id === itemId);
+          if (itemIndex > -1) {
+            categoryItems[itemIndex] = { ...categoryItems[itemIndex], days: Object.assign([...categoryItems[itemIndex].days], {[dayIndex]: value}) };
+            monthData[categoryId] = categoryItems;
+          }
+          return { ...prev, [monthYearKey]: monthData };
+        });
+      };
+
+      const handleItemEdit = (categoryId, itemId, field, value) => {
+        setInventoryData(prev => {
+          const monthData = { ...prev[monthYearKey] };
+          const categoryItems = [...monthData[categoryId]];
+          const itemIndex = categoryItems.findIndex(i => i.id === itemId);
+          if (itemIndex > -1) {
+            categoryItems[itemIndex] = { ...categoryItems[itemIndex], [field]: value };
+            monthData[categoryId] = categoryItems;
+          }
+          return { ...prev, [monthYearKey]: monthData };
+        });
+      };
+
+      const handleAddItem = (e) => {
+        e.preventDefault();
+        if (!newItemName || !newItemUnit || !newItemPrice) return;
+        setInventoryData(prev => {
+          const monthData = { ...prev[monthYearKey] };
+          monthData[activeCategory] = [...monthData[activeCategory], { id: Date.now(), name: newItemName, unit: newItemUnit, price: parseFloat(newItemPrice) || 0, days: Array(31).fill('') }];
+          return { ...prev, [monthYearKey]: monthData };
+        });
+        setNewItemName(''); setNewItemUnit(''); setNewItemPrice('');
+      };
+
+      const handleDeleteItem = (categoryId, itemId) => {
+        confirmAction('ยืนยันการลบรายการ', 'คุณต้องการลบรายการวัตถุดิบนี้ออกจากหมวดหมู่นี้หรือไม่? ข้อมูลการสั่งซื้อจะถูกลบไปด้วย', () => {
+          setInventoryData(prev => {
+            const monthData = { ...prev[monthYearKey] };
+            monthData[categoryId] = monthData[categoryId].filter(i => i.id !== itemId);
+            return { ...prev, [monthYearKey]: monthData };
+          });
+        });
+      };
+
+      const calculateItemTodayCost = (item) => (parseFloat(item.days[dayIndex]) || 0) * (parseFloat(item.price) || 0);
+      const calculateCategoryTodayTotal = (categoryId) => currentInventory[categoryId].reduce((sum, item) => sum + calculateItemTodayCost(item), 0);
+      const calculateGrandTodayTotal = () => categories.reduce((sum, cat) => sum + calculateCategoryTodayTotal(cat), 0);
+      const calculateCategoryMonthTotal = (categoryId) => currentInventory[categoryId].reduce((sum, item) => sum + (item.days.slice(0, daysInSelectedMonth).reduce((s, v) => s + (parseFloat(v) || 0), 0) * (parseFloat(item.price) || 0)), 0);
+      const calculateGrandMonthTotal = () => categories.reduce((sum, cat) => sum + calculateCategoryMonthTotal(cat), 0);
+
+      const exportToCsv = () => {
+        let csvContent = "หมวดหมู่,ชื่อวัตถุดิบ,หน่วย,ราคา/หน่วย,จำนวนสั่งวันนี้,รวมเป็นเงิน\n";
+        categories.forEach(cat => {
+          currentInventory[cat].forEach(item => {
+            const qty = parseFloat(item.days[dayIndex]) || 0;
+            if (qty > 0) csvContent += `"${cat}","${item.name}","${item.unit}",${item.price},${qty},${calculateItemTodayCost(item)}\n`;
+          });
+        });
+        csvContent += `\n,,,,,ยอดรวมวันนี้,${calculateGrandTodayTotal()}`;
+        showCsvModal(csvContent, `Daily_Order_${globalDate}.csv`);
+      };
+
+      const categoryMeta = {
+        'เนื้อสัตว์': { icon: <Icon name="restaurant" size={28} />, color: 'bg-rose-100 text-rose-600', activeColor: 'bg-rose-500 text-white shadow-rose-200', borderColor: 'border-rose-500' },
+        'ผักสด': { icon: <Icon name="eco" size={28} />, color: 'bg-green-100 text-green-600', activeColor: 'bg-green-500 text-white shadow-green-200', borderColor: 'border-green-500' },
+        'ของแห้ง': { icon: <Icon name="inventory_2" size={28} />, color: 'bg-amber-100 text-amber-600', activeColor: 'bg-amber-500 text-white shadow-amber-200', borderColor: 'border-amber-500' },
+        'ของแช่แข็ง': { icon: <Icon name="ac_unit" size={28} />, color: 'bg-cyan-100 text-cyan-600', activeColor: 'bg-cyan-500 text-white shadow-cyan-200', borderColor: 'border-cyan-500' },
+        'เครื่องปรุง': { icon: <Icon name="water_drop" size={28} />, color: 'bg-orange-100 text-orange-600', activeColor: 'bg-orange-500 text-white shadow-orange-200', borderColor: 'border-orange-500' },
+        'วัสดุสิ้นเปลือง': { icon: <Icon name="shopping_bag" size={28} />, color: 'bg-purple-100 text-purple-600', activeColor: 'bg-purple-500 text-white shadow-purple-200', borderColor: 'border-purple-500' }
+      };
+
+      return (
+        <div className="p-4 md:p-8 flex flex-col h-full max-w-[1400px] mx-auto relative print-expand">
+          <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-6">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-3"><div className="p-2 bg-blue-100 rounded-lg text-blue-600"><Icon name="calendar_month" size={28} /></div> บันทึกการสั่งวัตถุดิบ (รายวัน)</h2>
+              <p className="text-slate-500 mt-2">เลือกวันที่และกรอกจำนวนที่สั่ง ระบบจะสรุปยอดให้อัตโนมัติและส่งไปยังหน้าบัญชี</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto items-center">
+              <CustomDatePicker selectedDate={globalDate} onDateChange={onDateChange} />
+              <ExportMenu onExportCsv={exportToCsv} fileNameContext="สั่งวัตถุดิบรายวัน" showMessage={showMessage} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 relative z-10">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-5 rounded-2xl shadow-md border border-blue-500/30 flex items-center justify-between print-no-shadow print-text-black">
+              <div><p className="text-blue-100 text-sm font-medium opacity-90 mb-1">ยอดรวมสั่งวัตถุดิบ <span className="font-bold underline decoration-blue-300 underline-offset-2">วันนี้</span></p><p className="text-3xl lg:text-4xl font-bold tracking-tight">{formatCurrency(calculateGrandTodayTotal())}</p></div>
+              <div className="bg-white/10 p-4 rounded-full hidden sm:block"><Icon name="shopping_cart" className="text-white" size={32} /></div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between print-no-shadow">
+              <div><p className="text-slate-500 text-sm font-medium mb-1">ยอดสั่งสมสม <span className="font-bold text-slate-700">ทั้งเดือนนี้</span> (1-{daysInSelectedMonth})</p><p className="text-2xl lg:text-3xl font-bold text-slate-800 tracking-tight">{formatCurrency(calculateGrandMonthTotal())}</p></div>
+              <div className="bg-slate-100 p-4 rounded-full hidden sm:block"><Icon name="calculate" className="text-slate-500" size={24} /></div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6 relative z-10 print-hidden">
+            {categories.map(cat => {
+              const meta = categoryMeta[cat] || { icon: <Icon name="inventory_2" size={28} />, color: 'bg-slate-100 text-slate-600', activeColor: 'bg-slate-800 text-white', borderColor: 'border-slate-800' };
+              const isActive = activeCategory === cat;
+              return (
+                <button key={cat} onClick={() => setActiveCategory(cat)} className={`relative flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all duration-300 overflow-hidden ${isActive ? `${meta.borderColor} bg-white shadow-md transform scale-[1.02] z-10` : `border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50 hover:shadow-sm`}`}>
+                  <div className={`p-3 rounded-xl mb-3 transition-colors duration-300 flex items-center justify-center ${isActive ? meta.activeColor + ' shadow-lg' : meta.color}`}>{meta.icon}</div>
+                  <span className={`text-[15px] font-bold transition-colors duration-300 ${isActive ? 'text-slate-800' : 'text-slate-500'}`}>{cat}</span>
+                  <span className={`absolute top-3 right-3 text-xs font-bold px-2 py-0.5 rounded-full transition-colors duration-300 ${isActive ? 'bg-slate-100 text-slate-800' : 'bg-slate-50 text-slate-400'}`}>{currentInventory[cat].length}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[400px] relative z-10 print-no-shadow">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-3">
+                <div className={`p-1.5 rounded-lg flex items-center justify-center ${categoryMeta[activeCategory]?.activeColor || 'bg-slate-800 text-white'}`}>{React.cloneElement(categoryMeta[activeCategory]?.icon || <Icon name="inventory_2" size={20} />, { size: 20 })}</div>
+                รายการหมวด: {activeCategory}
+              </h3>
+            </div>
+            <div className="flex-1 overflow-auto custom-scrollbar print-expand">
+              <table className="w-full text-sm text-left border-collapse">
+                <thead className="bg-slate-100/90 sticky top-0 z-30 backdrop-blur-md shadow-sm">
+                  <tr>
+                    <th className="px-5 py-4 border-b font-bold text-slate-700 w-1/3">รายการวัตถุดิบ (คลิกแก้ไขได้)</th>
+                    <th className="px-4 py-4 border-b text-center font-bold text-slate-700">หน่วย</th>
+                    <th className="px-4 py-4 border-b text-right font-bold text-slate-700">ราคา/หน่วย</th>
+                    <th className="px-6 py-4 border-b text-center font-bold text-blue-800 bg-blue-50/80 w-40">จำนวนสั่งซื้อวันนี้</th>
+                    <th className="px-6 py-4 border-b text-right font-bold text-blue-900 bg-blue-100/80 w-40">รวมเป็นเงิน</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {currentInventory[activeCategory].map((item) => {
+                    const qty = item.days[dayIndex];
+                    const todayCost = calculateItemTodayCost(item);
+                    const hasOrder = parseFloat(qty) > 0;
+                    return (
+                      <tr key={item.id} className={`group transition-colors ${hasOrder ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}>
+                        <td className="px-5 py-3 flex items-center gap-2">
+                          <input type="text" value={item.name} onChange={(e) => handleItemEdit(activeCategory, item.id, 'name', e.target.value)} className="font-medium text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 outline-none w-full transition-colors p-1" />
+                          <button onClick={() => handleDeleteItem(activeCategory, item.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 bg-white rounded-lg shadow-sm shrink-0 border border-slate-200 print-hidden"><Icon name="delete" size={16} /></button>
+                        </td>
+                        <td className="px-4 py-3 text-center"><input type="text" value={item.unit} onChange={(e) => handleItemEdit(activeCategory, item.id, 'unit', e.target.value)} className="w-20 text-center text-slate-500 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 outline-none transition-colors p-1" /></td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="text-emerald-600 font-semibold text-xs">฿</span>
+                            <input type="number" min="0" step="0.01" value={item.price} onChange={(e) => handleItemEdit(activeCategory, item.id, 'price', e.target.value)} className="w-20 text-right font-semibold text-emerald-600 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 outline-none transition-colors p-1" />
+                          </div>
+                        </td>
+                        <td className="px-6 py-2 bg-blue-50/30">
+                          <input type="text" inputMode="decimal" value={qty} onChange={(e) => handleQtyChange(activeCategory, item.id, e.target.value)} className={`w-full text-center border-2 rounded-xl p-2.5 outline-none transition-all font-bold text-lg ${hasOrder ? 'border-blue-400 bg-white text-blue-700 shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-white hover:border-slate-300 focus:border-blue-500 focus:bg-white'}`} placeholder="0" />
+                        </td>
+                        <td className="px-6 py-3 text-right bg-blue-50/50 font-bold text-base">
+                          {todayCost > 0 ? <span className="text-blue-700">{formatCurrency(todayCost)}</span> : <span className="text-slate-300">-</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="bg-slate-50/80 print-hidden">
+                    <td colSpan={5} className="p-5 border-t border-slate-200">
+                      <form onSubmit={handleAddItem} className="flex flex-wrap items-end gap-4 max-w-4xl bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex-1 min-w-[200px]">
+                          <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">เพิ่มรายการวัตถุดิบใหม่</label>
+                          <input type="text" required value={newItemName} onChange={(e) => setNewItemName(e.target.value)} placeholder="ชื่อรายการ..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                        </div>
+                        <div className="w-28"><label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">หน่วย</label><input type="text" required value={newItemUnit} onChange={(e) => setNewItemUnit(e.target.value)} placeholder="ขวด, กก." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                        <div className="w-32"><label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">ราคา/หน่วย</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">฿</span><input type="number" required min="0" step="0.01" value={newItemPrice} onChange={(e) => setNewItemPrice(e.target.value)} placeholder="0.00" className="w-full border border-slate-300 rounded-lg py-2.5 pr-2.5 pl-7 text-sm focus:ring-2 focus:ring-blue-500 outline-none" /></div></div>
+                        <button type="submit" className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors shadow-sm h-[42px]"><Icon name="add" size={18} /> เพิ่ม</button>
+                      </form>
+                    </td>
+                  </tr>
+                </tbody>
+                <tfoot className="sticky bottom-0 z-30 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+                  <tr className="bg-slate-800 text-white">
+                    <td colSpan="3" className="px-5 py-4 text-right font-bold text-lg">รวมมูลค่าสั่ง {activeCategory} <span className="text-blue-300 underline underline-offset-2">วันนี้</span> :</td>
+                    <td className="bg-slate-800 border-r border-slate-700"></td>
+                    <td className="px-6 py-4 bg-slate-900 text-right text-emerald-400 font-bold text-2xl shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.5)]">{formatCurrency(calculateCategoryTodayTotal(activeCategory))}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- INCOME & EXPENSE COMPONENT ---
+    function IncomeExpenseView({ globalDate, onDateChange, inventoryData, financeData, setFinanceData, confirmAction, showCsvModal, showMessage }) {
+      const [yearStr, monthStr, dayStr] = globalDate.split('-');
+      const currentMonthPrefix = `${yearStr}-${monthStr}`;
+      const dayIndex = parseInt(dayStr, 10) - 1;
+      const daysInMonth = new Date(parseInt(yearStr), parseInt(monthStr), 0).getDate();
+
+      const getMaterialCosts = () => {
+        const currentMonthData = inventoryData[currentMonthPrefix] || INITIAL_INVENTORY;
+        let dailyCost = 0; let monthlyCost = 0;
+        Object.values(currentMonthData).forEach(catItems => {
+          catItems.forEach(item => {
+            const price = parseFloat(item.price) || 0;
+            dailyCost += (parseFloat(item.days[dayIndex]) || 0) * price;
+            let itemMonthlyQty = 0;
+            for (let i = 0; i < daysInMonth; i++) itemMonthlyQty += (parseFloat(item.days[i]) || 0);
+            monthlyCost += itemMonthlyQty * price;
+          });
+        });
+        return { dailyCost, monthlyCost };
+      };
+
+      const { dailyCost: dailyMaterialCost, monthlyCost: monthlyMaterialCost } = getMaterialCosts();
+      const todayData = financeData[globalDate] || { income: { cash: '', transfer: '', grab: '', lineman: '', shopee: '' }, otherExpenses: [] };
+
+      const [newExpenseName, setNewExpenseName] = useState(''); const [newExpenseAmount, setNewExpenseAmount] = useState('');
+
+      const handleIncomeChange = (field, value) => {
+        if (value !== '' && isNaN(value)) return;
+        setFinanceData(prev => ({ ...prev, [globalDate]: { ...todayData, income: { ...todayData.income, [field]: value } } }));
+      };
+
+      const handleAddOtherExpense = (e) => {
+        e.preventDefault();
+        if (!newExpenseName || !newExpenseAmount) return;
+        setFinanceData(prev => ({ ...prev, [globalDate]: { ...todayData, otherExpenses: [...todayData.otherExpenses, { id: Date.now(), name: newExpenseName, amount: parseFloat(newExpenseAmount) || 0 }] } }));
+        setNewExpenseName(''); setNewExpenseAmount('');
+      };
+
+      const handleDeleteExpense = (id) => {
+        confirmAction('ยืนยันลบรายจ่าย', 'คุณต้องการลบรายการค่าใช้จ่ายนี้หรือไม่?', () => {
+          setFinanceData(prev => ({ ...prev, [globalDate]: { ...todayData, otherExpenses: todayData.otherExpenses.filter(ex => ex.id !== id) } }));
+        });
+      };
+
+      const dailyIncome = (parseFloat(todayData.income.cash) || 0) + (parseFloat(todayData.income.transfer) || 0) + (parseFloat(todayData.income.grab) || 0) + (parseFloat(todayData.income.lineman) || 0) + (parseFloat(todayData.income.shopee) || 0);
+      const dailyOtherExpense = todayData.otherExpenses.reduce((sum, ex) => sum + ex.amount, 0);
+      const dailyTotalExpense = dailyMaterialCost + dailyOtherExpense;
+      const dailyNetProfit = dailyIncome - dailyTotalExpense;
+
+      let monthlyIncome = 0; let monthlyOtherExpense = 0;
+      Object.keys(financeData).forEach(dateKey => {
+        if (dateKey.startsWith(currentMonthPrefix)) {
+          const dData = financeData[dateKey];
+          monthlyIncome += (parseFloat(dData.income.cash) || 0) + (parseFloat(dData.income.transfer) || 0) + (parseFloat(dData.income.grab) || 0) + (parseFloat(dData.income.lineman) || 0) + (parseFloat(dData.income.shopee) || 0);
+          monthlyOtherExpense += dData.otherExpenses.reduce((sum, ex) => sum + ex.amount, 0);
+        }
+      });
+      const monthlyTotalExpense = monthlyMaterialCost + monthlyOtherExpense;
+      const monthlyNetProfit = monthlyIncome - monthlyTotalExpense;
+
+      const exportToCsv = () => {
+        let csvContent = "ประเภท,รายการ,จำนวนเงิน (บาท)\n";
+        csvContent += `รายรับ,เงินสดหน้าร้าน,${todayData.income.cash || 0}\nรายรับ,เงินโอน (QR Code),${todayData.income.transfer || 0}\nรายรับ,ยอดขาย Grab,${todayData.income.grab || 0}\nรายรับ,ยอดขาย Lineman,${todayData.income.lineman || 0}\nรายรับ,ยอดขาย ShopeeFood,${todayData.income.shopee || 0}\n,,รวมรายรับ,${dailyIncome}\n\n`;
+        csvContent += `รายจ่าย,ค่าวัตถุดิบรายวัน,${dailyMaterialCost}\n`;
+        todayData.otherExpenses.forEach(ex => { csvContent += `รายจ่าย,"${ex.name}",${ex.amount}\n`; });
+        csvContent += `,,รวมรายจ่าย,${dailyTotalExpense}\n\n,,กำไรสุทธิ,${dailyNetProfit}\n`;
+        showCsvModal(csvContent, `Income_Expense_${globalDate}.csv`);
+      };
+
+      return (
+        <div className="p-4 md:p-8 flex flex-col h-full max-w-[1200px] mx-auto print-expand">
+          <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-6">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-3">
+                <div className="p-2 bg-amber-100 rounded-lg text-amber-600"><Icon name="account_balance_wallet" size={28} /></div> บันทึกรายรับ-รายจ่าย (ประจำวัน)
+              </h2>
+              <p className="text-slate-500 mt-2">ยอดค่าวัตถุดิบจะถูกดึงมาจากหน้า "บันทึกสั่งวัตถุดิบ" อัตโนมัติ เพื่อคำนวณกำไรสุทธิ</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
+              <CustomDatePicker selectedDate={globalDate} onDateChange={onDateChange} />
+              <ExportMenu onExportCsv={exportToCsv} fileNameContext="รายรับรายจ่าย" showMessage={showMessage} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-emerald-100 flex items-start gap-4 print-no-shadow">
+              <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl mt-1"><Icon name="trending_up" size={24}/></div>
+              <div className="flex-1">
+                <p className="text-slate-500 text-sm font-medium">รายรับรวม (วันนี้)</p><p className="text-2xl font-bold text-slate-800">{formatCurrency(dailyIncome)}</p>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center text-xs"><span className="text-slate-500 font-medium">ยอดสะสมทั้งเดือน</span><span className="font-bold text-emerald-600 text-sm">{formatCurrency(monthlyIncome)}</span></div>
+              </div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-rose-100 flex items-start gap-4 print-no-shadow">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-xl mt-1"><Icon name="trending_down" size={24}/></div>
+              <div className="flex-1">
+                <p className="text-slate-500 text-sm font-medium">รายจ่ายรวม (วันนี้)</p><p className="text-2xl font-bold text-slate-800">{formatCurrency(dailyTotalExpense)}</p>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center text-xs"><span className="text-slate-500 font-medium">ยอดสะสมทั้งเดือน</span><span className="font-bold text-rose-600 text-sm">{formatCurrency(monthlyTotalExpense)}</span></div>
+              </div>
+            </div>
+            <div className={`p-5 rounded-2xl shadow-md border flex items-start gap-4 ${dailyNetProfit >= 0 ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 border-emerald-500 text-white print-text-black' : 'bg-gradient-to-r from-rose-500 to-rose-600 border-rose-500 text-white print-text-black'}`}>
+              <div className="p-3 bg-white/20 rounded-xl mt-1"><Icon name="monetization_on" size={24}/></div>
+              <div className="flex-1">
+                <p className="text-sm font-medium opacity-90">กำไรสุทธิ (วันนี้)</p><p className="text-3xl font-bold tracking-tight">{formatCurrency(dailyNetProfit)}</p>
+                <div className="mt-3 pt-3 border-t border-white/20 flex justify-between items-center text-xs"><span className="font-medium opacity-90">ยอดสะสมทั้งเดือน</span><span className="font-bold text-sm bg-white/20 px-2 py-0.5 rounded-md">{formatCurrency(monthlyNetProfit)}</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col print-no-shadow">
+              <div className="p-4 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
+                <Icon name="trending_up" className="text-emerald-600" size={20} /><h3 className="font-bold text-lg text-emerald-800">รายรับ (Income)</h3>
+              </div>
+              <div className="p-6 flex-1 flex flex-col gap-5 print-expand">
+                <div className="space-y-4">
+                  <IncomeInputRow label="เงินสดหน้าร้าน" value={todayData.income.cash} onChange={(v) => handleIncomeChange('cash', v)} />
+                  <IncomeInputRow label="เงินโอน (QR Code)" value={todayData.income.transfer} onChange={(v) => handleIncomeChange('transfer', v)} />
+                  <IncomeInputRow label="ยอดขาย Grab" value={todayData.income.grab} onChange={(v) => handleIncomeChange('grab', v)} />
+                  <IncomeInputRow label="ยอดขาย Lineman" value={todayData.income.lineman} onChange={(v) => handleIncomeChange('lineman', v)} />
+                  <IncomeInputRow label="ยอดขาย ShopeeFood" value={todayData.income.shopee} onChange={(v) => handleIncomeChange('shopee', v)} />
+                </div>
+                <div className="mt-auto pt-6 border-t border-slate-100">
+                  <div className="flex justify-between items-center px-2"><span className="font-bold text-slate-600">รวมรายรับวันนี้</span><span className="text-2xl font-bold text-emerald-600">{formatCurrency(dailyIncome)}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col print-no-shadow">
+              <div className="p-4 bg-rose-50 border-b border-rose-100 flex items-center gap-2">
+                <Icon name="trending_down" className="text-rose-600" size={20} /><h3 className="font-bold text-lg text-rose-800">รายจ่าย (Expenses)</h3>
+              </div>
+              <div className="p-6 flex-1 flex flex-col print-expand">
+                <div className="mb-5 p-4 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center">
+                  <div className="flex items-center gap-3"><div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Icon name="shopping_cart" size={18} /></div><div><p className="font-bold text-slate-800">ค่าวัตถุดิบรายวัน</p><p className="text-xs text-slate-500">ดึงข้อมูลอัตโนมัติจากหน้าสั่งวัตถุดิบ</p></div></div>
+                  <span className="text-lg font-bold text-rose-600">{formatCurrency(dailyMaterialCost)}</span>
+                </div>
+
+                <h4 className="font-bold text-sm text-slate-500 mb-3 uppercase tracking-wide">ค่าใช้จ่ายอื่นๆ (เฉพาะวันนี้)</h4>
+                <div className="space-y-2 mb-6 flex-1 overflow-auto custom-scrollbar print-expand">
+                  {todayData.otherExpenses.length === 0 ? (
+                    <p className="text-center text-sm text-slate-400 py-4 italic bg-slate-50 rounded-xl border border-dashed border-slate-200">ไม่มีค่าใช้จ่ายอื่นๆ ในวันนี้</p>
+                  ) : (
+                    todayData.otherExpenses.map((ex) => (
+                      <div key={ex.id} className="flex justify-between items-center p-3 hover:bg-slate-50 border-b border-slate-100 group transition-colors">
+                        <span className="font-medium text-slate-700">{ex.name}</span>
+                        <div className="flex items-center gap-4">
+                          <span className="font-bold text-rose-600">{formatCurrency(ex.amount)}</span>
+                          <button onClick={() => handleDeleteExpense(ex.id)} className="text-slate-300 hover:text-red-500 transition-colors print-hidden"><Icon name="delete" size={16} /></button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <form onSubmit={handleAddOtherExpense} className="flex gap-2 pt-4 border-t border-slate-100 print-hidden">
+                  <input type="text" placeholder="ชื่อรายการ (เช่น ค่าแรง, ค่าแก๊ส)" value={newExpenseName} onChange={(e) => setNewExpenseName(e.target.value)} className="flex-1 border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400" />
+                  <input type="text" inputMode="decimal" placeholder="จำนวนเงิน" value={newExpenseAmount} onChange={(e) => setNewExpenseAmount(e.target.value)} className="w-28 border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400 text-right" />
+                  <button type="submit" className="bg-slate-800 hover:bg-slate-900 text-white px-4 rounded-lg flex items-center justify-center transition-colors"><Icon name="add" size={18} /></button>
+                </form>
+
+                <div className="mt-5 pt-5 border-t border-slate-100">
+                  <div className="flex justify-between items-center px-2"><span className="font-bold text-slate-600">รวมรายจ่ายวันนี้</span><span className="text-2xl font-bold text-rose-600">{formatCurrency(dailyTotalExpense)}</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function IncomeInputRow({ label, value, onChange }) {
+      return (
+        <div className="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-xl hover:border-emerald-300 transition-colors group">
+          <span className="font-medium text-slate-700">{label}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-bold text-sm">฿</span>
+            <input type="text" inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0" className="w-32 text-right font-bold text-lg text-emerald-700 bg-white border border-slate-200 rounded-lg p-1.5 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-sm" />
+          </div>
+        </div>
+      );
+    }
+
+    function NavItem({ icon, label, isActive, onClick, badge }) {
+      return (
+        <button onClick={onClick} className={`w-full flex items-center justify-between px-3 py-3 rounded-xl mb-1 transition-all duration-200 ${isActive ? 'bg-blue-50 text-blue-700 font-bold shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium'}`}>
+          <div className="flex items-center gap-3"><span className={`${isActive ? 'text-blue-600' : 'text-slate-400'}`}>{icon}</span><span className="text-sm">{label}</span></div>
+          {badge && <span className="bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide border border-purple-200">{badge}</span>}
+        </button>
+      );
+    }
+
+    // --- COG & YIELD CALCULATOR COMPONENT ---
+    function CogCalculatorView({ recipes, setRecipes, confirmAction, showCsvModal, showMessage }) {
+      const [activeRecipeId, setActiveRecipeId] = useState(recipes.length > 0 ? recipes[0].id : null);
+      const activeRecipe = recipes.find(r => r.id === activeRecipeId) || null;
+
+      const handleAddRecipe = () => {
+        const newRecipe = { id: Date.now(), name: `เมนูใหม่ ${recipes.length + 1}`, sellingPrice: 0, ingredients: [] };
+        setRecipes(prev => [...prev, newRecipe]); setActiveRecipeId(newRecipe.id);
+      };
+
+      const handleDeleteRecipe = (id) => {
+        confirmAction('ยืนยันการลบเมนู', 'คุณแน่ใจหรือไม่ว่าต้องการลบเมนูนี้ ข้อมูลสูตรทั้งหมดจะถูกลบอย่างถาวร?', () => {
+          setRecipes(prev => {
+            const updated = prev.filter(r => r.id !== id);
+            if (activeRecipeId === id) setActiveRecipeId(updated.length > 0 ? updated[0].id : null);
+            return updated;
+          });
+        });
+      };
+
+      const handleUpdateActiveRecipe = (field, value) => { setRecipes(prev => prev.map(r => r.id === activeRecipeId ? { ...r, [field]: value } : r)); };
+
+      const handleUpdateIngredient = (ingId, field, value) => {
+        let parsedValue = value;
+        if (field !== 'name' && field !== 'unit') {
+          if (value !== '') { parsedValue = parseFloat(value); if (isNaN(parsedValue)) return; }
+        }
+        setRecipes(prev => prev.map(r => r.id === activeRecipeId ? { ...r, ingredients: r.ingredients.map(ing => ing.id === ingId ? { ...ing, [field]: parsedValue } : ing) } : r));
+      };
+
+      const handleAddIngredient = () => {
+        setRecipes(prev => prev.map(r => r.id === activeRecipeId ? { ...r, ingredients: [...r.ingredients, { id: Date.now(), name: '', apPrice: 0, apQty: 1000, unit: 'กรัม', yieldPercent: 100, recipeQty: 0 }] } : r));
+      };
+
+      const handleDeleteIngredient = (ingId) => {
+        setRecipes(prev => prev.map(r => r.id === activeRecipeId ? { ...r, ingredients: r.ingredients.filter(ing => ing.id !== ingId) } : r));
+      };
+
+      const calculateCost = (ing) => {
+        const price = parseFloat(ing.apPrice) || 0; const qty = parseFloat(ing.apQty) || 0; const yld = parseFloat(ing.yieldPercent) || 0; const recQty = parseFloat(ing.recipeQty) || 0;
+        if (qty === 0 || yld === 0) return 0;
+        return (price / (qty * (yld / 100))) * recQty;
+      };
+
+      const totalRecipeCost = activeRecipe ? activeRecipe.ingredients.reduce((sum, ing) => sum + calculateCost(ing), 0) : 0;
+      const parsedSellingPrice = activeRecipe ? (parseFloat(activeRecipe.sellingPrice) || 0) : 0;
+      const foodCostPercent = parsedSellingPrice > 0 ? (totalRecipeCost / parsedSellingPrice) * 100 : 0;
+      const grossProfit = parsedSellingPrice - totalRecipeCost;
+
+      const exportToCsv = () => {
+        if (!activeRecipe) return;
+        let csvContent = `ชื่อเมนู:,"${activeRecipe.name}"\nราคาขาย:,${parsedSellingPrice} บาท\nต้นทุนรวม:,${totalRecipeCost.toFixed(2)} บาท\nFood Cost:,${foodCostPercent.toFixed(2)}%\nกำไรขั้นต้น:,${grossProfit.toFixed(2)} บาท\n\n`;
+        csvContent += "ชื่อวัตถุดิบ,ราคา AP,ปริมาณ AP,หน่วย,Yield %,ใช้จริง,ต้นทุนสุทธิ\n";
+        activeRecipe.ingredients.forEach(ing => { csvContent += `"${ing.name}",${ing.apPrice},${ing.apQty},"${ing.unit}",${ing.yieldPercent},${ing.recipeQty},${calculateCost(ing).toFixed(2)}\n`; });
+        showCsvModal(csvContent, `Recipe_COG_${activeRecipe.name.substring(0,20)}.csv`);
+      };
+
+      return (
+        <div className="p-4 md:p-8 flex flex-col h-full max-w-[1400px] mx-auto relative print-expand">
+          <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-3"><div className="p-2 bg-purple-100 rounded-lg text-purple-600"><Icon name="calculate" size={28} /></div> คำนวณต้นทุนอาหาร (COG & Yield)</h2>
+              <p className="text-slate-500 mt-2 max-w-2xl">จัดการสูตรอาหารของคุณ กำหนดราคาขายและคำนวณต้นทุนวัตถุดิบแยกตามแต่ละเมนูได้อย่างละเอียด</p>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 flex flex-col sm:flex-row gap-4 items-center justify-between print-hidden">
+            <div className="flex items-center gap-3 w-full sm:w-auto flex-1">
+              <Icon name="menu_book" className="text-purple-600 shrink-0" size={24} />
+              <div className="relative flex-1 max-w-md">
+                <select value={activeRecipeId || ''} onChange={(e) => setActiveRecipeId(Number(e.target.value))} className="w-full bg-purple-50/50 border border-purple-200 hover:border-purple-300 rounded-xl py-2.5 pl-4 pr-10 font-bold text-purple-900 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 shadow-sm appearance-none cursor-pointer transition-all">
+                  {recipes.length === 0 && <option value="">-- ไม่มีเมนูในระบบ --</option>}
+                  {recipes.map(r => <option key={r.id} value={r.id}>{r.name || 'เมนูไม่มีชื่อ'}</option>)}
+                </select>
+                <Icon name="expand_more" className="absolute right-3 top-1/2 -translate-y-1/2 text-purple-400 pointer-events-none" size={18} />
+              </div>
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <button onClick={handleAddRecipe} className="flex-1 sm:flex-none bg-purple-100 text-purple-700 hover:bg-purple-200 px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"><Icon name="add" size={18} /> สร้างเมนูใหม่</button>
+              {activeRecipe && <button onClick={() => handleDeleteRecipe(activeRecipe.id)} className="bg-rose-50 text-rose-600 hover:bg-rose-200 px-4 py-2.5 rounded-xl font-bold flex items-center justify-center transition-colors shadow-sm" title="ลบเมนูนี้"><Icon name="delete" size={18} /> <span className="sm:hidden ml-2">ลบเมนู</span></button>}
+              {activeRecipe && <ExportMenu onExportCsv={exportToCsv} fileNameContext="ต้นทุนสูตรอาหาร" showMessage={showMessage} />}
+            </div>
+          </div>
+
+          {activeRecipe ? (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 print-expand">
+              <div className="xl:col-span-2 flex flex-col gap-6 print-expand">
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 relative overflow-hidden print-no-shadow">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
+                  <div className="flex-1 pl-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">ชื่อเมนูอาหาร</label>
+                    <div className="relative">
+                      <Icon name="restaurant_menu" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input type="text" value={activeRecipe.name} onChange={(e) => handleUpdateActiveRecipe('name', e.target.value)} placeholder="ตั้งชื่อเมนู เช่น ผัดไทยกุ้งสด..." className="w-full border border-slate-300 rounded-xl py-2.5 pl-10 pr-3 text-base focus:ring-2 focus:ring-purple-500 outline-none font-bold text-slate-800 transition-shadow" />
+                    </div>
+                  </div>
+                  <div className="w-full md:w-48">
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">ราคาขาย (บาท)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 font-bold">฿</span>
+                      <input type="number" min="0" value={activeRecipe.sellingPrice} onChange={(e) => handleUpdateActiveRecipe('sellingPrice', e.target.value)} className="w-full border border-emerald-300 bg-emerald-50 rounded-xl py-2.5 pl-8 pr-3 text-lg font-bold text-emerald-800 focus:ring-2 focus:ring-emerald-500 outline-none text-right transition-shadow" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden print-no-shadow">
+                  <div className="p-4 border-b border-slate-200 flex justify-between items-center"><h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Icon name="shopping_cart" size={18} className="text-slate-500" /> สูตรและส่วนผสม</h3></div>
+                  <div className="overflow-x-auto custom-scrollbar print-expand">
+                    <table className="w-full text-sm text-left border-collapse min-w-[850px]">
+                      <thead className="bg-white border-b border-slate-200">
+                        <tr>
+                          <th className="px-4 py-4 font-bold text-slate-600 w-[22%]">ชื่อวัตถุดิบ</th><th className="px-4 py-4 font-bold text-blue-800 bg-blue-50/30 text-center w-[38%]">1. ข้อมูลการซื้อ (AP)</th><th className="px-4 py-4 font-bold text-purple-800 bg-purple-50/30 text-center w-[25%]">2. การใช้งานในสูตร</th><th className="px-4 py-4 font-bold text-slate-700 text-right">ต้นทุนสุทธิ</th><th className="px-2 py-4"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {activeRecipe.ingredients.length === 0 ? (
+                          <tr><td colSpan="5" className="text-center py-12 text-slate-400"><div className="flex flex-col items-center justify-center gap-3"><Icon name="eco" size={32} className="text-slate-300" /><p>ยังไม่มีวัตถุดิบในเมนูนี้</p></div></td></tr>
+                        ) : (
+                          activeRecipe.ingredients.map((ing) => (
+                            <tr key={ing.id} className="hover:bg-slate-50 transition-colors group">
+                              <td className="px-4 py-4 align-top"><input type="text" value={ing.name} onChange={(e) => handleUpdateIngredient(ing.id, 'name', e.target.value)} placeholder="เช่น เนื้อหมู" className="w-full p-2.5 bg-white border border-slate-200 hover:border-slate-300 focus:border-purple-500 rounded-xl outline-none font-bold text-slate-700 transition-colors shadow-sm" /></td>
+                              <td className="px-4 py-4 align-top bg-blue-50/10">
+                                <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
+                                  <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all"><input type="text" inputMode="decimal" value={ing.apPrice} onChange={(e) => handleUpdateIngredient(ing.id, 'apPrice', e.target.value)} className="w-16 p-2 text-right font-bold text-slate-700 outline-none" placeholder="0" /><span className="pr-3 text-slate-400 font-medium">฿</span></div>
+                                  <span className="text-slate-400 text-xs font-bold px-1">ต่อ</span>
+                                  <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all"><input type="text" inputMode="decimal" value={ing.apQty} onChange={(e) => handleUpdateIngredient(ing.id, 'apQty', e.target.value)} className="w-16 p-2 text-right font-bold text-slate-700 outline-none" placeholder="0" /></div>
+                                  <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all"><input type="text" value={ing.unit} onChange={(e) => handleUpdateIngredient(ing.id, 'unit', e.target.value)} className="w-14 p-2 text-center text-slate-600 outline-none font-medium" placeholder="หน่วย" /></div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 align-top bg-purple-50/10">
+                                <div className="flex flex-col gap-2.5 items-center">
+                                  <div className="flex items-center gap-2 w-full justify-center"><span className="text-xs font-bold text-slate-400 w-12 text-right">Yield</span><div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all"><input type="text" inputMode="decimal" value={ing.yieldPercent} onChange={(e) => handleUpdateIngredient(ing.id, 'yieldPercent', e.target.value)} className="w-14 p-1.5 text-center font-bold text-blue-600 outline-none" /><span className="pr-3 text-blue-400 font-bold">%</span></div></div>
+                                  <div className="flex items-center gap-2 w-full justify-center"><span className="text-xs font-bold text-slate-500 w-12 text-right">ใช้จริง</span><div className="flex items-center bg-white border border-purple-300 rounded-xl overflow-hidden shadow-sm focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 transition-all"><input type="text" inputMode="decimal" value={ing.recipeQty} onChange={(e) => handleUpdateIngredient(ing.id, 'recipeQty', e.target.value)} className="w-14 p-1.5 text-center font-bold text-purple-700 outline-none" placeholder="0" /></div><span className="text-xs font-medium text-slate-500 w-8 truncate">{ing.unit || '-'}</span></div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 align-top pt-8 text-right"><div className="font-bold text-lg text-slate-800 bg-slate-100/70 inline-block px-3 py-1.5 rounded-lg border border-slate-200">{formatCurrency(calculateCost(ing))}</div></td>
+                              <td className="px-2 py-4 align-top pt-8 text-center print-hidden"><button onClick={() => handleDeleteIngredient(ing.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors" title="ลบวัตถุดิบ"><Icon name="delete" size={18} /></button></td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-center print-hidden"><button onClick={handleAddIngredient} className="flex items-center justify-center gap-2 text-sm font-bold bg-white border-2 border-dashed border-purple-300 text-purple-600 hover:text-purple-800 hover:border-purple-500 hover:bg-purple-50 px-6 py-3 rounded-xl transition-all w-full max-w-md shadow-sm"><Icon name="add" size={18} /> เพิ่มวัตถุดิบลงในสูตรนี้</button></div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <div className="bg-slate-800 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden print-no-shadow print-text-black">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Icon name="calculate" size={100} /></div>
+                  <h3 className="font-medium text-slate-300 mb-1">ต้นทุนวัตถุดิบรวม (Total COG)</h3>
+                  <p className="text-4xl font-bold tracking-tight mb-6">{formatCurrency(totalRecipeCost)}</p>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-end border-b border-slate-700 pb-3"><span className="text-sm text-slate-400">ราคาขาย</span><span className="text-lg font-bold">{formatCurrency(parsedSellingPrice)}</span></div>
+                    <div className="flex justify-between items-end border-b border-slate-700 pb-3"><div className="flex items-center gap-2 text-sm text-slate-400"><Icon name="percent" size={14} /> สัดส่วนต้นทุน (Food Cost)</div><span className={`text-lg font-bold px-2 py-0.5 rounded-md ${foodCostPercent > 35 ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>{foodCostPercent.toFixed(1)}%</span></div>
+                    <div className="flex justify-between items-end pt-2"><span className="text-sm font-medium text-emerald-200">กำไรขั้นต้น (Gross Profit)</span><span className="text-2xl font-bold text-emerald-400">{formatCurrency(grossProfit)}</span></div>
+                  </div>
+                </div>
+                <div className="bg-blue-50 border border-blue-100 p-5 rounded-2xl print-no-shadow">
+                  <h4 className="font-bold text-blue-800 mb-2 flex items-center gap-2"><Icon name="scale" size={18} /> เข้าใจระบบ Yield</h4>
+                  <p className="text-sm text-blue-600/80 leading-relaxed mb-3"><strong className="text-blue-700">Yield % (เปอร์เซ็นต์ที่ใช้ได้)</strong> คือสัดส่วนที่เหลือหลังการตัดแต่งวัตถุดิบ เช่น ซื้อไก่มา 1 กิโลกรัม ตัดกระดูกทิ้งเหลือเนื้อ 700 กรัม เท่ากับว่า Yield = 70%</p>
+                  <div className="bg-white/60 p-3 rounded-lg text-xs text-blue-800">
+                    <span className="font-bold block mb-1">มาตรฐานเบื้องต้น:</span><ul className="list-disc pl-4 space-y-1"><li>เนื้อสัตว์ตัดแต่ง: 70% - 85%</li><li>ผักสด (ตัดราก/ใบเสีย): 80% - 90%</li><li>ของแห้ง/เครื่องปรุง: 100%</li></ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl flex-1 flex flex-col items-center justify-center text-slate-400 min-h-[400px] print-hidden">
+              <div className="p-6 bg-slate-50 rounded-full mb-4"><Icon name="restaurant_menu" size={48} className="text-slate-300" /></div>
+              <p className="text-xl font-bold text-slate-500 mb-2">ไม่มีเมนูในระบบ</p><p className="text-sm mb-6">กรุณาสร้างเมนูใหม่เพื่อเริ่มต้นการคำนวณต้นทุน</p>
+              <button onClick={handleAddRecipe} className="flex items-center gap-2 bg-purple-100 text-purple-700 hover:bg-purple-200 px-6 py-3 rounded-xl font-bold transition-colors"><Icon name="add" size={20} /> สร้างเมนูใหม่</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
